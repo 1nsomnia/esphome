@@ -1,0 +1,189 @@
+substitutions:
+  devicename: "as5600"
+  friendly_name: as5600
+  device_description: as5600
+
+esphome:
+  name: as5600
+  friendly_name: as5600
+  on_boot:
+    - priority: -100  # Make sure it happens after sensors initialize
+      then:
+      - lambda: |-
+          int target_position = 185;  // Target raw position to move the motor to
+          int current_position = (int)id(as5600_angle).state;
+         
+          if (current_position < target_position) {
+            int steps_to_move = target_position - current_position;
+            id(my_stepper).set_target(-steps_to_move);  // Move forward by difference in steps
+          } else if (current_position > target_position) {
+            int steps_to_move = current_position - target_position;
+            id(my_stepper).set_target(steps_to_move);  // Move backward by difference in steps
+          }
+    - priority: 700
+      then:
+#      - stepper.set_acceleration:
+#          id: my_stepper
+#          acceleration: inf
+#      - stepper.set_deceleration:
+#          id: my_stepper
+#          deceleration: inf
+      - stepper.report_position:
+          id: my_stepper
+          position: 0
+#      - stepper.set_target:
+#          id: my_stepper
+#          target: !lambda 'return id(valve_capacity_lookup_table)[10];'
+#      - wait_until:
+#          condition:
+#            lambda:
+#              return id(my_stepper).current_position == id(my_stepper).target_position;
+#      - stepper.set_speed:
+#          id: my_stepper
+#          speed: 150 steps/s
+#      - stepper.report_position:
+#          id: my_stepper
+#          position: 0
+#      - stepper.set_target:
+#          id: my_stepper
+#          target: 0
+#      - stepper.set_speed:
+#          id: my_stepper
+#          speed: 350 steps/s
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: DEBUG
+
+api:
+
+ota:
+  - platform: esphome
+  #  password: "4c44a1cbff4932238c50fbe84cad181f"
+
+i2c:
+  - id: bus_a
+    sda: GPIO21 #data sda
+    scl: GPIO22 #clock scl
+    scan: true
+
+as5600:
+  #dir_pin: GPIOXX
+  start_position: 0deg
+  range: 360deg
+  id: my_as5600
+
+sensor:
+  - platform: as5600
+    id: as5600_angle
+    #name: Position
+    raw_position:
+        name: RawPosition
+    #gain:
+    #    name: Gain
+    #magnitude:
+    #    name: Magnitude
+    #status:
+    #    name: Status
+    update_interval: 2s
+    #name: angle
+    #unit_of_measurement: '°'
+    #accuracy_decimals: 2
+    #icon: mdi:rotate-right
+    #filters:
+    #  - delta: 1
+    #  - lambda: 'return x * as5600::RAW_TO_DEGREES * id(my_as5600).get_range_scale();'
+
+# This is optional and can be commented out to disable the Web Server
+web_server:
+  port: 80
+  
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: on
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Open AIR Valve Config AP"
+    password: "ChangeMe@123!"
+
+globals:
+  - id: valve_capacity_lookup_table
+    type: std::vector<int>
+    restore_value: no
+    initial_value: '{0,10,20,31,41,51,61,72,82,92,102,113,123,133,143,154,164,174,184,195,205,215,225,236,246,256,266,276,287,297,307,317,328,338,348,358,369,379,389,399,410,420,430,440,451,461,471,481,492,502,512,522,532,543,553,563,573,584,594,604,614,625,635,645,655,666,676,686,696,707,717,727,737,748,758,768,778,788,799,809,819,829,840,850,860,870,881,891,901,911,922,932,942,952,963,973,983,993,1004,1014,1024}'
+number:
+  - platform: template
+    name: "${friendly_name}-Capacity %"
+    id: valve_capacity
+    optimistic: true
+    restore_value: no
+    initial_value: 0
+    min_value: 0
+    max_value: 100
+    step: 10
+    mode: slider
+    on_value:
+      then:
+        - stepper.set_target:
+            id: my_stepper
+            target: !lambda |-
+              if (x <= 0) { 
+                return 0; 
+              } else if(x >= 100) {
+                return 1024;
+              } else if (x > 0 && x < 100) {
+                int steps = id(valve_capacity_lookup_table)[x];
+                return steps;
+              } else {
+                return 0;
+              }
+  
+cover:
+  - platform: template
+    name: "${friendly_name}-valve"
+    id: valve
+    lambda: |-
+      if (id(my_stepper).current_position <= 0) {
+        return COVER_CLOSED;
+      } else if (id(my_stepper).current_position > 0 && id(my_stepper).current_position <= 100) {
+        return COVER_OPEN;
+      } else {
+        return {};
+      }
+    open_action:
+      - number.set:
+          id: valve_capacity
+          value: 100
+      - stepper.set_target:
+          id: my_stepper
+          target: 1024
+    close_action:
+      - number.set:
+          id: valve_capacity
+          value: 0
+      - stepper.set_target:
+          id: my_stepper
+          target: 0
+
+stepper:
+  - platform: a4988
+    id: my_stepper
+    step_pin: GPIO19
+    dir_pin: GPIO18
+    max_speed: 350 steps/s
+    # Optional:
+    #acceleration: 500 steps/s^2
+    #deceleration: 500 steps/s^2
+    sleep_pin: 
+      number: GPIO05
+      inverted: true
+
+switch:
+  - platform: restart
+    name: "${devicename}-recalibrate"
