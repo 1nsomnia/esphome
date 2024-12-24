@@ -1,0 +1,138 @@
+substitutions:
+  devicename: "hal-energysensor"
+  friendly_name: hal-energysensor
+  device_description: hal-energysensor
+  ic1Volts: "230"
+  update_time: never
+
+esphome:
+  name: "hal-energysensor"
+  name_add_mac_suffix: false
+  comment: "esp32 S2"
+  #platform: ESP32
+  #board: esp32dev
+
+esp32:
+  board: esp32-s2-saola-1
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+ # encryption:
+   # key: "Z47bMC+r9JzZgVBgAtd3XPP1bHxTq/zLT/23+VzV49M="
+
+ota:
+  platform: esphome
+  #password: "dff1324a93fd45f1f1ede8f563e75b5b"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: on
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Hal-Energysensor"
+    password: "kmqI4Akm4mPF"
+
+captive_portal:
+
+
+sensor:
+
+    # The grid voltage entity from Home Assistant
+  - platform: homeassistant
+    name: "Grid Voltage Entity from Home Assistant"
+    entity_id: 'sensor.electricity_meter_voltage_phase_l1'
+    id: grid_voltage_l1
+    internal: true
+  - platform: ct_clamp
+    sensor: adc_sensor_ct1
+    name: "ct1Amps"
+    id: ct1Amps
+    update_interval: 2s 
+    sample_duration: 1s
+    filters:
+      - calibrate_linear:
+          - 0.00035 -> 0
+          - 0.02550 -> 2.3
+          - 0.05360 -> 4.81
+          - 0.091 -> 8.09
+      - lambda: return x * id(grid_voltage_l1).state;
+    unit_of_measurement: "W"
+
+  - platform: ct_clamp
+    sensor: adc_sensor_ct2
+    name: "ct2Amps"
+    id: ct2Amps
+    update_interval: 2s
+    sample_duration: 1s
+    filters:
+      - calibrate_linear:
+          # Measured value of 0 maps to 0A
+          - 0.00033 -> 0
+          - 0.02530 -> 2.28
+          - 0.05610 -> 5.04
+          - 0.09940 -> 8.85
+      - lambda: return x * id(grid_voltage_l1).state;
+    unit_of_measurement: "W"
+  - platform: ct_clamp
+    sensor: adc_sensor_ct3
+    name: "ct3Amps"
+    id: ct3Amps
+    update_interval: 2s
+    sample_duration: 1s
+    filters:
+      - calibrate_linear:
+          # Measured value of 0 maps to 0A
+          - 0.00034 -> 0
+          - 0.02560 -> 2.28
+          - 0.05610 -> 5.04
+          - 0.09940 -> 8.85
+      - lambda: return x * id(grid_voltage_l1).state;
+    unit_of_measurement: "W"
+  - platform: ct_clamp
+    sensor: adc_sensor_ct4
+    name: "ct4Amps"
+    id: ct4Amps
+    update_interval: 2s
+    sample_duration: 1s
+    filters:
+      - calibrate_linear:
+          # Measured value of 0 maps to 0A
+          - 0.00043 -> 0
+          - 0.02530 -> 2.28
+          - 0.05610 -> 5.04
+          - 0.09940 -> 8.85
+      - lambda: return x * id(grid_voltage_l1).state;
+    unit_of_measurement: "W"
+
+  - platform: adc
+    pin: GPIO01
+    id: adc_sensor_ct1
+    # raw: true
+    attenuation: auto
+    # update_interval: 1s
+  - platform: adc
+    pin: GPIO02
+    id: adc_sensor_ct2
+    # raw: true
+    attenuation: auto
+    # update_interval: 1s
+  - platform: adc
+    pin: GPIO03
+    id: adc_sensor_ct3
+    # raw: true
+    attenuation: auto
+    # update_interval: 1s
+  - platform: adc
+    pin: GPIO04
+    id: adc_sensor_ct4
+    # raw: true
+    attenuation: auto
+    # update_interval: 1s
+
